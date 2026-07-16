@@ -1,0 +1,1775 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>探店美化机 · 黄油风</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Ma+Shan+Zheng&family=ZCOOL+XiaoWei&family=Long+Cang&family=Liu+Jian+Mao+Cao&family=Noto+Sans+SC:wght@400;700;900&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          grape: '#7C4DFF', violet: '#5F5AA5', wisteria: '#BAACEB',
+          ygreen: '#88D062', avocado: '#5E899B', pink: '#FF8FB1', cream: '#FFF0D9'
+        },
+        fontFamily: { cute: ['"ZCOOL KuaiLe"', '"Noto Sans SC"', 'sans-serif'] },
+        borderRadius: { '2xl': '1.25rem', '3xl': '1.75rem' },
+        boxShadow: { soft: '0 10px 30px rgba(124,77,255,0.18)', card: '0 6px 18px rgba(0,0,0,0.08)' },
+        keyframes: {
+          floaty: { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-6px)' } },
+          pop: { '0%': { transform: 'scale(.9)', opacity: 0 }, '100%': { transform: 'scale(1)', opacity: 1 } },
+          pulse: { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.5 } }
+        },
+        animation: { floaty: 'floaty 3s ease-in-out infinite', pop: 'pop .25s ease-out', pulse: 'pulse 1.5s ease-in-out infinite' }
+      }
+    }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'ZCOOL KuaiLe', 'Noto Sans SC', sans-serif;
+    background: transparent;
+    color: #3a2a4a;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* iOS Safari 不支持 background-attachment:fixed，改用固定伪元素承载渐变背景，避免背景错位/滚动卡顿 */
+  body::before {
+    content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: -1;
+    background: linear-gradient(160deg, #FFE3EC 0%, #FFF0D9 55%, #FFF6E9 100%);
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .chip { transition: all .15s ease; cursor: pointer; }
+  .chip:active { transform: scale(.93); }
+  .glass { background: rgba(255,255,255,0.72); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  input, textarea, select { font-family: 'Noto Sans SC', sans-serif; }
+  .fab-shadow { box-shadow: 0 8px 22px rgba(124,77,255,0.35); }
+  .hidden { display: none !important; }
+  canvas { max-width: 100%; }
+  /* 全局加载遮罩 */
+  .loading-mask { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(160deg, #FFE3EC, #FFF0D9); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; gap: 12px; }
+  .spinner { width: 38px; height: 38px; border: 4px solid #ffd0df; border-top-color: #7C4DFF; border-radius: 50%; animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* 编辑页专属加载 */
+  .edit-loader {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.92); z-index: 10; gap: 10px; border-radius: 1.75rem;
+  }
+  .edit-loader .spinner-lg { width: 44px; height: 44px; border: 4px solid #e8d0ff; border-top-color: #7C4DFF; border-radius: 50%; animation: spin 0.85s linear infinite; }
+  /* 拼图模板卡片 */
+  .tmpl-card {
+    position: relative; overflow: hidden; border-radius: 14px; border: 2px solid transparent;
+    transition: all .2s; cursor: pointer; background: #f5f0ff; flex-shrink: 0;
+  }
+  .tmpl-card:hover { border-color: #7C4DFF; box-shadow: 0 4px 14px rgba(124,77,255,0.2); }
+  .tmpl-card.active { border-color: #7C4DFF; box-shadow: 0 4px 16px rgba(124,77,255,0.35); }
+  .tmpl-card svg { display: block; width: 100%; height: 100%; }
+  /* 拼图画布容器 */
+  .collage-preview-wrap {
+    position: relative; border-radius: 20px; overflow: hidden; background: #fff; box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+  }
+  /* 图片选择器 */
+  .img-picker-item {
+    position: relative; border-radius: 12px; overflow: hidden; cursor: pointer; border: 2px solid transparent;
+    transition: all .15s; flex-shrink: 0;
+  }
+  .img-picker-item:hover { border-color: #BAACEB; }
+  .img-picker-item.selected { border-color: #7C4DFF; box-shadow: 0 2px 10px rgba(124,77,255,0.3); }
+  .img-picker-item.selected::after {
+    content: '✓'; position: absolute; top: 4px; right: 4px; background: #7C4DFF; color: #fff;
+    width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+<!-- 全局加载遮罩 -->
+<div id="loadingMask" class="loading-mask">
+  <div class="spinner"></div>
+  <div class="text-grape font-bold text-lg">探店美化机加载中…</div>
+</div>
+
+<!-- ===================== 首页 ===================== -->
+<div id="homeView" class="max-w-md mx-auto min-h-screen flex flex-col">
+  <!-- 头部 -->
+  <div class="px-4 pt-5 pb-2 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl text-grape">探店美化机</h1>
+      <p class="text-xs text-gray-500">黄油相机风 · 一键出片 + 文案</p>
+    </div>
+    <button id="btnSettings" class="chip bg-white rounded-full w-10 h-10 shadow-card text-lg">⚙️</button>
+  </div>
+
+  <!-- 上传区 -->
+  <div class="px-4">
+    <div id="uploadZone" class="rounded-3xl border-[3px] border-dashed border-grape/50 bg-white/70 p-6 text-center cursor-pointer active:scale-95 transition">
+      <div class="text-5xl mb-2 animate-floaty">📤</div>
+      <div class="text-grape font-bold">点击或拖拽上传探店图片</div>
+      <div class="text-xs text-gray-400 mt-1">支持多张，自动智能优化</div>
+    </div>
+    <input id="fileInput" type="file" accept="image/*" multiple hidden />
+  </div>
+
+  <!-- 图片网格 + 首图推荐 -->
+  <div id="gridSection" class="px-4 mt-4 hidden">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg text-violet">🖼️ 已上传 (<span id="imgCount">0</span>)</h2>
+      <button id="btnSmartAll" class="chip bg-ygreen text-white rounded-full px-3 py-1.5 text-sm shadow-card">✨ 智能优化全部</button>
+    </div>
+    <div id="imgGrid" class="grid grid-cols-3 gap-2"></div>
+    <p class="text-xs text-gray-400 mt-2">点图片进入编辑；金色边框为推荐首图，点其他图即替换首图</p>
+  </div>
+
+  <!-- ========== 智能拼图（新增）========== -->
+  <div id="collageSection" class="px-4 mt-5 hidden">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg text-violet">🧩 智能拼图</h2>
+      <button id="btnCloseCollage" class="chip bg-gray-200 rounded-full px-3 py-1 text-xs text-gray-600">收起</button>
+    </div>
+    <p class="text-xs text-gray-400 mb-3">选择图片 → 选模板 → 一键生成精美拼图</p>
+
+    <!-- 选择图片 -->
+    <div class="mb-3">
+      <div class="text-xs text-gray-500 mb-1.5">选择要拼图的图片（已选 <span id="collageSelCount">0</span> 张）</div>
+      <div id="collagePicker" class="flex gap-2 no-scrollbar overflow-x-auto pb-1"></div>
+    </div>
+
+    <!-- 模式切换 -->
+    <div class="flex gap-2 mb-3">
+      <button data-cmode="simple" class="cmode-btn chip flex-1 rounded-xl py-2 text-sm bg-grape text-white shadow-card">📐 简单拼接</button>
+      <button data-cmode="creative" class="cmode-btn chip flex-1 rounded-xl py-2 text-sm bg-white text-gray-600 border border-gray-200">✨ 创意拼图</button>
+    </div>
+
+    <!-- 简单拼接模板 -->
+    <div id="simpleTmplArea">
+      <div class="text-xs text-gray-500 mb-1.5">选择布局</div>
+      <div id="simpleTmplList" class="flex gap-2 no-scrollbar overflow-x-auto pb-1"></div>
+    </div>
+
+    <!-- 创意拼图模板 -->
+    <div id="creativeTmplArea" class="hidden">
+      <div class="text-xs text-gray-500 mb-1.5">选择创意模板</div>
+      <div id="creativeTmplList" class="flex gap-2 no-scrollbar overflow-x-auto pb-1"></div>
+    </div>
+
+    <!-- 拼图预览 -->
+    <div id="collagePreviewWrap" class="collage-preview-wrap mt-3 hidden">
+      <canvas id="collageCanvas"></canvas>
+      <div id="collageEditLoader" class="edit-loader"><div class="spinner-lg"></div><span class="text-sm text-grape">生成拼图中…</span></div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="flex gap-2 mt-3">
+      <button id="btnGenCollage" class="chip flex-1 bg-grape text-white rounded-xl py-2.5 text-sm fab-shadow">🎨 生成拼图</button>
+      <button id="btnExportCollage" class="chip flex-1 bg-pink text-white rounded-xl py-2.5 text-sm fab-shadow hidden">💾 导出拼图</button>
+    </div>
+  </div>
+
+  <!-- 拼图入口按钮（无图时隐藏） -->
+  <div class="px-4 mt-3 hidden" id="collageEntryRow">
+    <button id="btnOpenCollage" class="chip w-full bg-white/80 border-2 border-dashed border-grape/40 rounded-2xl py-3 text-grape font-bold text-sm hover:border-grape transition">🧩 打开智能拼图</button>
+  </div>
+
+  <!-- 文案区 -->
+  <div class="px-4 mt-5">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg text-violet">✍️ 探店文案</h2>
+      <div class="flex gap-1" id="toneBtns">
+        <button data-tone="活泼" class="chip text-xs px-2.5 py-1 rounded-full bg-grape text-white border border-gray-200">活泼</button>
+        <button data-tone="文艺" class="chip text-xs px-2.5 py-1 rounded-full bg-white text-gray-600 border border-gray-200">文艺</button>
+        <button data-tone="种草" class="chip text-xs px-2.5 py-1 rounded-full bg-white text-gray-600 border border-gray-200">种草</button>
+      </div>
+    </div>
+    <div class="bg-white/80 rounded-3xl p-4 shadow-card">
+      <input id="kwInput" placeholder="主题关键词，如：火锅 / 甜品 / 居酒屋（选填）"
+        class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm mb-3 outline-none focus:border-grape" />
+      <div id="copyEmpty" class="text-sm text-gray-400 text-center py-6">还没生成文案，点下面按钮试试～</div>
+      <div id="copyContent" class="hidden">
+        <input id="copyTitle" class="w-full font-bold text-base mb-2 bg-transparent outline-none border-b border-dashed border-gray-300" />
+        <textarea id="copyBody" rows="4" class="w-full text-sm bg-transparent outline-none resize-none border-b border-dashed border-gray-300 mb-2"></textarea>
+        <input id="copyTags" class="w-full text-sm text-grape bg-transparent outline-none" />
+      </div>
+      <div class="flex gap-2 mt-3">
+        <button id="btnGenLocal" class="chip flex-1 bg-grape text-white rounded-xl py-2 text-sm fab-shadow">🎲 生成 / 重生成</button>
+        <button id="btnGenAI" class="chip flex-1 bg-pink text-white rounded-xl py-2 text-sm fab-shadow hidden">🤖 AI 生成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 对话式需求栏（首页，固定底部） -->
+  <div class="sticky bottom-0 z-30 glass border-t border-white/60 px-3 py-3 mt-auto">
+    <div class="flex items-center gap-2">
+      <input id="cmdHome" placeholder="如：生成150字文案 / 写火锅的文案 / 首图换成第2张 / 滤镜全部冷色 / 文字改成好吃到哭"
+        class="flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm outline-none focus:border-grape bg-white" />
+      <button id="btnCmdHome" class="chip bg-grape text-white rounded-full px-4 py-2 text-sm fab-shadow">发送</button>
+    </div>
+    <button id="btnExportLong" class="chip w-full mt-2 bg-pink text-white rounded-xl py-2 text-sm fab-shadow hidden">📲 导出长图（首图+文案）</button>
+  </div>
+</div>
+
+<!-- ===================== 编辑视图 ===================== -->
+<div id="editView" class="hidden min-h-screen flex flex-col">
+  <!-- 顶栏 -->
+  <div class="sticky top-0 z-20 glass border-b border-white/60 px-3 py-2 flex items-center gap-2">
+    <button id="btnBack" class="chip bg-white rounded-full px-3 py-1.5 text-sm shadow-card">← 返回</button>
+    <span id="editTitle" class="text-sm truncate flex-1">图片编辑</span>
+    <button id="btnApplyAll" class="chip bg-grape text-white rounded-full px-3 py-1.5 text-sm fab-shadow">应用全部</button>
+    <button id="btnExport" class="chip bg-pink text-white rounded-full px-3 py-1.5 text-sm fab-shadow">导出 ▾</button>
+  </div>
+
+  <!-- 画布（含加载遮罩） -->
+  <div class="flex-1 flex items-center justify-center p-3">
+    <div class="rounded-3xl overflow-hidden shadow-soft bg-white animate-pop relative" style="min-width:300px;min-height:380px;">
+      <div id="canvasWrap"><canvas id="editCanvas"></canvas></div>
+      <!-- 编辑页专属加载遮罩 -->
+      <div id="editLoader" class="edit-loader hidden">
+        <div class="spinner-lg"></div>
+        <span class="text-sm text-grape font-bold">正在处理图片…</span>
+        <span class="text-xs text-gray-400">首次加载需 1-3 秒</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 控制面板 -->
+  <div class="glass border-t border-white/60">
+    <div class="flex no-scrollbar overflow-x-auto px-2 py-2 gap-1" id="editTabs">
+      <button data-tab="filter" class="chip whitespace-nowrap px-3 py-1.5 rounded-full text-sm bg-grape text-white">🎨 滤镜</button>
+      <button data-tab="text" class="chip whitespace-nowrap px-3 py-1.5 rounded-full text-sm bg-white text-gray-600">✍️ 花字</button>
+      <button data-tab="sticker" class="chip whitespace-nowrap px-3 py-1.5 rounded-full text-sm bg-white text-gray-600">🌿 贴纸</button>
+      <button data-tab="palette" class="chip whitespace-nowrap px-3 py-1.5 rounded-full text-sm bg-white text-gray-600">🌈 调色</button>
+      <button data-tab="selected" class="chip whitespace-nowrap px-3 py-1.5 rounded-full text-sm bg-ygreen/30 text-gray-700 hidden">✏️ 选中花字</button>
+    </div>
+
+    <div class="px-3 pb-3 pt-1 min-h-[160px]">
+      <!-- 滤镜面板 -->
+      <div id="panel-filter">
+        <div class="text-xs text-gray-500 mb-2">AI 已按图片自动匹配，可左右滑动切换，拖动滑块调强度</div>
+        <div id="filterList" class="flex no-scrollbar overflow-x-auto gap-2 pb-2"></div>
+        <div class="mt-2 flex items-center gap-2">
+          <span class="text-sm">强度</span>
+          <input id="intensityRange" type="range" min="0" max="100" value="80" class="flex-1 accent-grape" />
+          <span id="intensityVal" class="text-sm w-10 text-right">80%</span>
+        </div>
+      </div>
+
+      <!-- 花字面版 -->
+      <div id="panel-text" class="hidden">
+        <input id="phraseInput" placeholder="输入花字内容…" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm mb-2 outline-none focus:border-grape" />
+        <div class="flex gap-2 mb-2">
+          <select id="styleSelect" class="rounded-xl border border-gray-200 px-2 py-1.5 text-sm flex-1 outline-none">
+            <option value="A">A 立体描边</option>
+            <option value="B">B 镂空线条</option>
+            <option value="C">C 色块标签</option>
+            <option value="D">D 手写飘带</option>
+            <option value="E">E 双色叠加</option>
+            <option value="F">F 弥散光底</option>
+          </select>
+          <select id="layoutSelect" class="rounded-xl border border-gray-200 px-2 py-1.5 text-sm flex-1 outline-none">
+            <option value="center">居中大标题</option>
+            <option value="corner">角落标签</option>
+            <option value="vertical">竖排文艺</option>
+          </select>
+        </div>
+        <div class="flex gap-2">
+          <button id="btnAddText" class="chip flex-1 bg-grape text-white rounded-xl py-2 text-sm fab-shadow">＋ 添加花字</button>
+          <button id="btnSmartAdd" class="chip flex-1 bg-pink text-white rounded-xl py-2 text-sm fab-shadow">✨ 智能排版</button>
+        </div>
+        <div id="phraseChips" class="mt-2 flex flex-wrap gap-1.5"></div>
+      </div>
+
+      <!-- 贴纸面板 -->
+      <div id="panel-sticker" class="hidden">
+        <div class="text-xs text-gray-500 mb-1">氛围装饰（点击添加到画面）</div>
+        <div id="decoList" class="flex flex-wrap gap-2 mb-3"></div>
+        <div class="text-xs text-gray-500 mb-1">探店功能贴纸</div>
+        <div id="badgeList" class="flex flex-wrap gap-2"></div>
+        <div class="text-xs text-gray-400 mt-2">提示：选中贴纸/花字后按 Delete 键或去「选中花字」页删除</div>
+      </div>
+
+      <!-- 调色盘面版 -->
+      <div id="panel-palette" class="hidden">
+        <div class="text-xs text-gray-500 mb-2">选中花字后点击配色，一键换渐变+描边</div>
+        <div id="paletteList" class="grid grid-cols-4 gap-2"></div>
+      </div>
+
+      <!-- 选中花字面版 -->
+      <div id="panel-selected" class="hidden">
+        <div class="flex gap-2 mb-2">
+          <span class="text-xs self-center">样式</span>
+          <div id="styleBtns" class="flex gap-1"></div>
+        </div>
+        <div class="flex gap-2 mb-2 items-center">
+          <span class="text-xs">字体</span>
+          <div id="fontBtns" class="flex gap-1"></div>
+        </div>
+        <div class="flex gap-2 mb-2 items-center">
+          <span class="text-xs">文字</span>
+          <input id="colorText" type="color" class="w-8 h-8 rounded border-0" />
+          <span class="text-xs">描边</span>
+          <input id="colorStroke" type="color" class="w-8 h-8 rounded border-0" />
+          <span class="text-xs">粗细</span>
+          <input id="strokeW" type="range" min="0" max="14" value="6" class="flex-1 accent-grape" />
+        </div>
+        <button id="btnDelSel" class="chip w-full bg-red-400 text-white rounded-xl py-2 text-sm">🗑️ 删除选中</button>
+      </div>
+    </div>
+
+    <!-- 对话式需求栏（编辑内） -->
+    <div class="flex items-center gap-2 px-3 pb-3 pt-1 border-t border-white/50">
+      <input id="cmdEdit" placeholder="如：生成150字文案 / 文字改成好吃到哭 / 滤镜改成清冷高级"
+        class="flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm outline-none focus:border-grape bg-white" />
+      <button id="btnCmdEdit" class="chip bg-grape text-white rounded-full px-4 py-2 text-sm fab-shadow">发送</button>
+    </div>
+  </div>
+
+  <div id="editToastAnchor"></div>
+</div>
+
+<!-- ===================== 设置弹窗 ===================== -->
+<div id="settingsModal" class="hidden fixed inset-0 bg-black/40 z-40 flex items-end sm:items-center justify-center">
+  <div class="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md p-5 animate-pop">
+    <h3 class="text-lg text-grape mb-3">⚙️ 设置（AI 文案接口）</h3>
+    <label class="text-xs text-gray-500">OpenAI API Key（选填，留空用本地模板）</label>
+    <input id="apiKeyInput" placeholder="sk-..." class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm mb-3 outline-none focus:border-grape" />
+    <label class="text-xs text-gray-500">API Base</label>
+    <input id="apiBaseInput" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm mb-4 outline-none focus:border-grape" />
+    <button id="btnSettingDone" class="chip w-full bg-grape text-white rounded-xl py-2.5 text-sm fab-shadow">完成</button>
+  </div>
+</div>
+
+<!-- 全局 Toast -->
+<div id="toast" class="fixed bottom-28 left-1/2 -translate-x-1/2 bg-black/80 text-white text-sm px-4 py-2 rounded-full z-50 animate-pop hidden"></div>
+
+<script>
+/* ============================ 常量 ============================ */
+var FONTS = { round: 'ZCOOL KuaiLe', hand: 'Ma Shan Zheng', black: 'Noto Sans SC', song: 'ZCOOL XiaoWei' };
+var FILTERS = [
+  { id: 'appetite', name: '食欲大增', swatch: 'linear-gradient(135deg,#FF7A45,#FF3D6E)' },
+  { id: 'cream',    name: '日系奶油', swatch: 'linear-gradient(135deg,#FFF6E0,#F2D9B0)' },
+  { id: 'showa',    name: '昭和胶片', swatch: 'linear-gradient(135deg,#9FB7A8,#E8D9A0)' },
+  { id: 'cool',     name: '清冷高级', swatch: 'linear-gradient(135deg,#DDE8F0,#AFC4D6)' },
+  { id: 'fresh',    name: '原生鲜亮', swatch: 'linear-gradient(135deg,#E6F7D9,#BFE89A)' },
+  { id: 'retro',    name: '复古拍立得', swatch: 'linear-gradient(135deg,#E9D9B8,#C9B48A)' },
+  { id: 'flash',    name: '夜间闪光灯', swatch: 'linear-gradient(135deg,#3a3a4a,#FFE9B0)' }
+];
+var PHRASES = ['一口入魂！', '绝了！这味道会回购', '排队2h也值', '按头安利给所有姐妹', '隐藏菜单挖到宝', '人均50吃到撑', '好吃到哭😭', '宝藏小店实锤', '闭眼冲就完事', '这口下去直接升华', '氛围感拉满✨', '出片率100%'];
+var DECO = ['⭐','✨','🔥','💕','🌸','💫','🌟','💖','🌈','🍃'];
+var BADGES = ['人均¥50','📍居民楼下','⭐4.9','⏳等30min','💥必吃','🏷️新品上架','🌿环境绝绝子'];
+var PALETTE = [
+  { name: '粉白', c1: '#FF8FB1', c2: '#FFD3E0', stroke: '#ffffff' },
+  { name: '黄紫', c1: '#FFE24D', c2: '#FFE24D', stroke: '#5F5AA5' },
+  { name: '蓝绿', c1: '#22D3EE', c2: '#22D3EE', stroke: '#88D062' },
+  { name: '橙红', c1: '#FF7A45', c2: '#FF3D6E', stroke: '#ffffff' },
+  { name: '薄荷', c1: '#2BD9A8', c2: '#2BD9A8', stroke: '#ffffff' },
+  { name: '紫罗兰', c1: '#9B6BFF', c2: '#D9A9FF', stroke: '#ffffff' },
+  { name: '珊瑚', c1: '#FF6B8A', c2: '#FF6B8A', stroke: '#ffffff' },
+  { name: '黑白', c1: '#FFFFFF', c2: '#FFFFFF', stroke: '#111111' }
+];
+var COPY_BANK = {
+  '活泼': {
+    titles: ['挖到宝！这家{t}直接封神🍜', '按头安利！{t}我来N刷了！', '闭眼冲！{t}好吃到哭😭'],
+    frags: [
+      '家人们谁懂啊！{t}一进门香味就往鼻子里钻🤤',
+      '点的每道菜都超能打，尤其是招牌那口，入口直接升华～',
+      '环境也超出片，随手一拍都是大片感📸',
+      '人均也不贵，周末约上姐妹冲就完事！',
+      '说实话本来只是随便逛逛，结果被味道狠狠拿捏了😋',
+      '吃完还在回味，已经开始盘算下次带谁来二刷了🤭',
+      '服务也在线，店员会主动推荐隐藏吃法，体验拉满💯',
+      '朋友圈发完直接被问爆，这波安利我当定了💥'
+    ],
+    tags: ['美食探店','宝藏小店','周末去哪吃','无辣不欢','出片率超高']
+  },
+  '文艺': {
+    titles: ['在{t}，遇见慢下来的午后', '{t}：一盏灯，一碗温柔', '把日子过成{t}的模样'],
+    frags: [
+      '推开门，喧闹被隔在身后。{t}的光是暖的，食物是安静的。',
+      '我们没怎么说话，只是把眼前的点心一盏盏吃完。',
+      '原来探店不只是吃，是借一顿饭的时间，把自己还给生活。',
+      '木桌、旧灯、一点点桂花的香，食物不张扬却每一口都有来处。',
+      '坐到天色暗下来，觉得城市也可以很温柔。',
+      '后来常想起那天的慢，像被妥善收藏的一页。',
+      '杯盏之间，时间被拉得很长，长到能听见自己的呼吸。'
+    ],
+    tags: ['生活美学','城市慢生活','小众探店','治愈系美食','周末漫游']
+  },
+  '种草': {
+    titles: ['{t}｜我的私藏清单+1', '答应我，{t}一定要去一次', '{t}种草成功，已安利全员'],
+    frags: [
+      '认真说，{t}是近期最惊喜的一家！从环境到出品都很在线。',
+      '招牌必点，闭眼不踩雷🌿 性价比也高，两个人吃到撑才人均xx。',
+      '已经列入我的「带谁来都不会错」清单，速速码住！',
+      '热门款和隐藏款都好吃，店员还会主动推荐当季限定🍂',
+      '收藏这一篇，下次不知道吃啥直接抄作业。',
+      '环境出片率超高，拍照发圈被问爆了📸',
+      '闭眼冲不踩雷，属于那种「自己私藏舍不得说」的店。'
+    ],
+    tags: ['种草清单','美食推荐','高性价比','探店日记','本地人最爱']
+  }
+};
+
+/* ========== 简单拼接模板定义 ========== */
+var SIMPLE_TEMPLATES = [
+  { id:'grid2x2', name:'2×2 网格', icon:'M2,2 h26 v26 H2z M32,2 h26 v26 H32z M2,32 h26 v26 H2z M32,32 h26 v26 H32z', cols:2, rows:2, gap:6, pad:12, ratio:1 },
+  { id:'grid1x3', name:'1×3 横排', icon:'M2,12 h56 v24 H2z', cols:3, rows:1, gap:6, pad:12, ratio:1 },
+  { id:'leftBig', name:'左大右小', icon:'M2,2 h30 v52 H2z M36,2 h22 v24 H36z M36,30 h22 v24 H36z', cols:[0.58,0.42], rows:2, gap:6, pad:12, ratio:1 },
+  { id:'topBottom', name:'上下拼接', icon:'M2,2 h56 v24 H2z M2,30 h56 v24 H2z', cols:1, rows:2, gap:6, pad:12, ratio:1 },
+  { id:'insta3_1', name:'Instagram 3+1', icon:'M2,2 h26 v26 H2z M32,2 h22 v26 H32z M2,30 h26 v26 H2z M32,30 h22 v26 H32z', layout:'insta', pad:12, ratio:1 },
+  { id:'grid2x3', name:'2×3 六宫格', icon:'M2,2 h16 v16 H2z M21,2 h16 v16 H21z M2,21 h16 v16 H2z M21,21 h16 v16 H21z M2,40 h16 v16 H2z M21,40 h16 v16 H21z', cols:2, rows:3, gap:4, pad:8, ratio:1 }
+];
+
+/* ========== 创意拼图模板定义 ========== */
+var CREATIVE_TEMPLATES = [
+  { id:'heart',   name:'❤️ 心形',       desc:'心形轮廓拼贴', draw:drawHeartCollage, needCount:[3,9] },
+  { id:'magazine',name:'📰 杂志风',     desc:'错落叠加杂志排版', draw:drawMagazineCollage, needCount:[3,6] },
+  { id:'filmstrip',name:'🎞️ 胶片风',   desc:'电影胶片式排列', draw:drawFilmStripCollage, needCount:[3,8] },
+  { id:'circle',  name:'⭕ 圆形组合',   desc:'圆形+矩形混排', draw:drawCircleCollage, needCount:[3,6] },
+  { id:'scatter', name:'🎲 不规则拼贴', desc:'旋转散落风格', draw:drawScatterCollage, needCount:[4,9] }
+];
+
+/* ============================ 工具函数 ============================ */
+function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+function uid() { return 'id_' + Math.random().toString(36).slice(2, 9); }
+function $(id) { return document.getElementById(id); }
+function showToast(msg) {
+  var t = $('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(function () { t.classList.add('hidden'); }, 2600);
+}
+function makeGradient(c1, c2) {
+  return new fabric.Gradient({ type: 'linear', gradientUnits: 'percentage', coords: { x1: 0, y1: 0, x2: 1, y2: 0 }, colorStops: [{ offset: 0, color: c1 }, { offset: 1, color: c2 }] });
+}
+function vertical(text) { return text.split('').join('\n'); }
+
+/* ============================ 滤镜链 ============================ */
+function buildFilters(preset, i) {
+  var F = fabric.Image.filters;
+  var a = [];
+  var sepia = function () { if (i > 0.2) a.push(new F.Sepia()); };
+  switch (preset) {
+    case 'appetite':
+      a.push(new F.Saturation({ saturation: 0.55 * i })); a.push(new F.Vibrance({ vibrance: 0.45 * i }));
+      a.push(new F.Brightness({ brightness: 0.06 * i })); a.push(new F.Gamma({ gamma: [0.85, 0.9, 1.12] })); break;
+    case 'cream':
+      a.push(new F.Contrast({ contrast: -0.18 * i })); a.push(new F.Brightness({ brightness: 0.12 * i }));
+      a.push(new F.Saturation({ saturation: -0.12 * i })); a.push(new F.Gamma({ gamma: [0.96, 0.98, 1.06] }));
+      a.push(new F.Blur({ blur: 0.03 * i })); break;
+    case 'showa':
+      a.push(new F.Vibrance({ vibrance: -0.12 * i })); a.push(new F.Saturation({ saturation: -0.08 * i }));
+      a.push(new F.Noise({ noise: 260 * i })); a.push(new F.Vignette({ offset: 0.28 * i + 0.05, blur: 0.55, color: '#000', type: 'dark', alpha: 0.6 }));
+      sepia(); a.push(new F.Gamma({ gamma: [1.06, 0.98, 0.96] })); break;
+    case 'cool':
+      a.push(new F.Saturation({ saturation: -0.3 * i })); a.push(new F.Contrast({ contrast: 0.12 * i }));
+      a.push(new F.Brightness({ brightness: 0.04 * i })); a.push(new F.Gamma({ gamma: [0.96, 0.99, 0.9] })); break;
+    case 'fresh':
+      a.push(new F.Brightness({ brightness: 0.08 * i })); a.push(new F.Contrast({ contrast: 0.05 * i }));
+      a.push(new F.Saturation({ saturation: 0.1 * i })); a.push(new F.Gamma({ gamma: [0.95, 0.95, 0.95] })); break;
+    case 'retro':
+      a.push(new F.Saturation({ saturation: -0.28 * i })); a.push(new F.Contrast({ contrast: -0.1 * i }));
+      a.push(new F.Brightness({ brightness: 0.03 * i })); sepia();
+      a.push(new F.Vignette({ offset: 0.4 * i + 0.05, blur: 0.5, color: '#000', type: 'dark', alpha: 0.55 })); break;
+    case 'flash':
+      a.push(new F.Brightness({ brightness: 0.1 * i })); a.push(new F.Contrast({ contrast: 0.15 * i }));
+      a.push(new F.Vignette({ offset: 0.45 * i + 0.05, blur: 0.5, color: '#000', type: 'dark', alpha: 0.65 }));
+      a.push(new F.Gamma({ gamma: [0.95, 0.95, 0.95] })); break;
+    default: break;
+  }
+  return a;
+}
+
+/* ============================ 花字样式 ============================ */
+function applyFancyStyle(obj, styleId, opts) {
+  opts = opts || {};
+  var grad = function (c1, c2) { return (c1 === c2 ? c1 : makeGradient(c1, c2)); };
+  switch (styleId) {
+    case 'A':
+      obj.set({ fill: grad('#FF7EB3', '#FFB36B'), stroke: '#ffffff', strokeWidth: 6, shadow: new fabric.Shadow({ color: 'rgba(60,20,40,0.45)', blur: 2, offsetX: 4, offsetY: 4 }), paintFirst: 'stroke', backgroundColor: null, angle: 0 }); break;
+    case 'B':
+      obj.set({ fill: 'rgba(0,0,0,0)', stroke: opts.stroke || '#FFE24D', strokeWidth: 5, shadow: new fabric.Shadow({ color: 'rgba(255,255,255,0.6)', blur: 2, offsetX: 0, offsetY: 0 }), paintFirst: 'stroke', backgroundColor: null, angle: 0 }); break;
+    case 'C':
+      obj.set({ fill: '#ffffff', stroke: null, strokeWidth: 0, backgroundColor: opts.blockColor || '#88D062', shadow: null, paintFirst: 'fill', angle: 0 }); break;
+    case 'D':
+      obj.set({ fontFamily: FONTS.hand, fill: '#7A2E2E', stroke: null, strokeWidth: 0, shadow: new fabric.Shadow({ color: 'rgba(120,40,40,0.3)', blur: 1, offsetX: 1, offsetY: 1 }), paintFirst: 'fill', backgroundColor: null, angle: opts.angle != null ? opts.angle : -4 }); break;
+    case 'E':
+      obj.set({ fill: '#FFE24D', stroke: null, strokeWidth: 0, shadow: new fabric.Shadow({ color: '#5F1A8A', blur: 0, offsetX: 3, offsetY: 3 }), paintFirst: 'fill', backgroundColor: null, angle: 0 }); break;
+    case 'F':
+      obj.set({ fill: '#ffffff', stroke: null, strokeWidth: 0, shadow: new fabric.Shadow({ color: opts.glow || '#FF5FA2', blur: 55, offsetX: 0, offsetY: 0 }), paintFirst: 'fill', backgroundColor: null, angle: 0 }); break;
+    default: break;
+  }
+}
+function addFancyText(c, o) {
+  var cw = c.getWidth(), ch = c.getHeight();
+  var text = o.text || pick(PHRASES);
+  var left, top, fs, angle = 0, t = text;
+  if (o.layout === 'center') { fs = Math.round(cw * 0.085); left = cw / 2; top = Math.random() > 0.5 ? ch * 0.1 : ch * 0.74; }
+  else if (o.layout === 'corner') { fs = Math.round(cw * 0.05); var tl = Math.random() > 0.5; left = tl ? cw * 0.28 : cw * 0.72; top = tl ? ch * 0.16 : ch * 0.8; angle = Math.random() * 16 - 8; }
+  else { fs = Math.round(cw * 0.05); var side = Math.random() > 0.5; left = side ? cw * 0.16 : cw * 0.84; top = ch * 0.28; t = vertical(text); }
+  var obj = new fabric.IText(t, { left: left, top: top, originX: 'center', originY: 'top', fontFamily: o.font || FONTS.round, fontSize: fs, textAlign: 'center', objType: 'fancy', fancyStyle: o.styleId, editable: true });
+  applyFancyStyle(obj, o.styleId, {});
+  if (angle) obj.set({ angle: angle });
+  c.add(obj); c.renderAll();
+  return obj;
+}
+function addSticker(c, o) {
+  var cw = c.getWidth(), ch = c.getHeight();
+  var left = cw * (0.2 + Math.random() * 0.6), top = ch * (0.2 + Math.random() * 0.6);
+  var obj;
+  if (o.kind === 'badge') {
+    obj = new fabric.IText(o.char, { left: left, top: top, originX: 'center', originY: 'center', fontFamily: FONTS.round, fontSize: Math.round(cw * 0.045), backgroundColor: '#FFE24D', fill: '#3a2a00', padding: 6, objType: 'sticker', stickerKind: 'badge' });
+  } else {
+    obj = new fabric.IText(o.char, { left: left, top: top, originX: 'center', originY: 'center', fontSize: Math.round(cw * 0.09), objType: 'sticker', stickerKind: 'deco' });
+  }
+  c.add(obj); c.renderAll();
+  return obj;
+}
+function randomSticker() { return Math.random() > 0.5 ? { char: pick(BADGES), kind: 'badge' } : { char: pick(DECO), kind: 'deco' }; }
+
+/* ============================ 图片统计 / 评分 ============================ */
+function computeStats(url) {
+  return new Promise(function (res) {
+    var im = new Image();
+    im.onload = function () {
+      try {
+        var cv = document.createElement('canvas'); cv.width = 24; cv.height = 24;
+        var ctx = cv.getContext('2d'); ctx.drawImage(im, 0, 0, 24, 24);
+        var d = ctx.getImageData(0, 0, 24, 24).data; var sum = 0, sat = 0, n = 0;
+        for (var i = 0; i < d.length; i += 4) {
+          var r = d[i], g = d[i + 1], b = d[i + 2];
+          var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+          sum += (r + g + b) / 3; sat += (mx === 0 ? 0 : (mx - mn) / mx); n++;
+        }
+        res({ brightness: sum / n / 255, saturation: sat / n });
+      } catch (e) { res({ brightness: 0.6, saturation: 0.4 }); }
+    };
+    im.onerror = function () { res({ brightness: 0.6, saturation: 0.4 }); };
+    im.src = url;
+  });
+}
+function pickFilter(stats) {
+  if (stats.brightness < 0.4) return 'flash';
+  if (stats.saturation > 0.5) return 'appetite';
+  if (stats.brightness > 0.8) return 'cream';
+  if (stats.brightness > 0.65) return 'fresh';
+  return 'showa';
+}
+function scoreImage(s) {
+  var brightScore = 1 - Math.abs(s.brightness - 0.55);
+  return 0.4 * brightScore + 0.35 * s.saturation + 0.25 * (1 - Math.abs(s.brightness - 0.5));
+}
+
+/* ============================ 文案生成 ============================ */
+function genCopyMock(keyword, tone, targetLen) {
+  var bank = COPY_BANK[tone] || COPY_BANK['活泼'];
+  var kw = keyword || '这家店';
+  var title = pick(bank.titles).replace(/\{t\}/g, kw);
+  var target = targetLen || 130;
+  var frags = bank.frags.slice();
+  var intro = frags[0].replace(/\{t\}/g, kw);
+  var rest = frags.slice(1);
+  for (var i = rest.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = rest[i]; rest[i] = rest[j]; rest[j] = tmp; }
+  var body = intro;
+  for (var k = 0; k < rest.length; k++) {
+    if (body.length >= target) break;
+    body += rest[k].replace(/\{t\}/g, kw);
+  }
+  var ri = 0;
+  while (body.length < target && rest.length) { body += rest[ri % rest.length].replace(/\{t\}/g, kw); ri++; }
+  return { title: title, body: body, tags: bank.tags.slice() };
+}
+async function genCopyAI(apiKey, apiBase, prompt) {
+  var r = await fetch(apiBase + '/chat/completions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify({ model: 'gpt-3.5-turbo', temperature: 0.9, messages: [{ role: 'user', content: prompt + ' 请严格返回 JSON：{"title":"...","body":"...","tags":["...","..."]}' }] })
+  });
+  if (!r.ok) throw new Error('API ' + r.status);
+  var j = await r.json();
+  var content = j.choices[0].message.content;
+  try { return JSON.parse(content); } catch (e) { var m = content.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); throw e; }
+}
+
+/* ============================ 命令解析 ============================ */
+function parseCmd(text) {
+  var m = text.match(/第\s*(\d+)\s*张/);
+  if (/首图|封面/.test(text) && m) return { type: 'cover', value: parseInt(m[1], 10) - 1 };
+  if (/文字|花字/.test(text) && /改成|改为|换成/.test(text)) {
+    var val = text.replace(/.*(改成|改为|换成)/, '').replace(/[，。！!?,?]/g, '').trim();
+    if (val) return { type: 'text', value: val };
+  }
+  var wantGen = /生成|写|来(一?段|篇|个)|创作|拟|做(一?段|篇)|产出/.test(text) &&
+                   /文案|内容|帖子|小红书|描述|文字|感受|种草文/.test(text);
+  var reGen = /重新|换一?个|再来|再写|重新写|换种/.test(text);
+  if (wantGen || reGen) {
+    var lenM = text.match(/(\d+)\s*字/);
+    var len = lenM ? parseInt(lenM[1], 10) : null;
+    if (!len) {
+      if (/长|多写|详细|丰富|多一点|长一点/.test(text)) len = 160;
+      else if (/短|精简|简洁|少一点|短一点/.test(text)) len = 60;
+    }
+    var t = null;
+    if (/文艺/.test(text)) t = '文艺';
+    else if (/种草/.test(text)) t = '种草';
+    else if (/活泼|俏皮|轻松/.test(text)) t = '活泼';
+    var topic = null;
+    var tm = text.match(/关于(.+?)(?:的|文案|内容|帖子|小红书|描述|文字)/);
+    if (!tm) tm = text.match(/(?:写|生成)(.+?)(?:的|文案|内容|帖子|小红书|描述|文字)/);
+    if (tm) {
+      topic = tm[1].replace(/^(关于|写|生成)/, '').replace(/\d+\s*字[以左右内]*/g, '').replace(/[以上以内左右]/g, '').trim();
+      if (!topic) topic = null;
+    }
+    return { type: 'gencopy', len: len, tone: t, topic: topic, regen: reGen || !t };
+  }
+  var fmap = {
+    '食欲大增': 'appetite', '食欲': 'appetite', '暖': 'appetite',
+    '日系奶油': 'cream', '奶油': 'cream', '日系': 'cream',
+    '昭和胶片': 'showa', '昭和': 'showa', '胶片': 'showa', '日料': 'showa', '居酒屋': 'showa',
+    '清冷高级': 'cool', '清冷': 'cool', '冷色': 'cool', '冷淡': 'cool', '西餐': 'cool',
+    '原生鲜亮': 'fresh', '鲜亮': 'fresh', '原生': 'fresh', '水果': 'fresh', '沙拉': 'fresh',
+    '复古拍立得': 'retro', '拍立得': 'retro', '复古': 'retro',
+    '夜间闪光灯': 'flash', '闪光灯': 'flash', '夜市': 'flash', '大排档': 'flash', '夜间': 'flash'
+  };
+  if (/滤镜|风格|色调|调色/.test(text)) {
+    for (var k in fmap) { if (text.indexOf(k) >= 0) return { type: 'filter', value: fmap[k] }; }
+    if (/冷/.test(text)) return { type: 'filter', value: 'cool' };
+    if (/暖/.test(text)) return { type: 'filter', value: 'appetite' };
+    return { type: 'filter', value: null };
+  }
+  if (/文案|语气|文风|风格/.test(text)) {
+    if (/文艺/.test(text)) return { type: 'tone', value: '文艺' };
+    if (/种草/.test(text)) return { type: 'tone', value: '种草' };
+    if (/活泼|俏皮/.test(text)) return { type: 'tone', value: '活泼' };
+  }
+  // 拼图命令
+  if (/拼图|拼接| collage/i.test(text)) {
+    return { type: 'collage' };
+  }
+  return { type: 'unknown' };
+}
+
+/* ============================ 全局状态 ============================ */
+var images = [];
+var coverId = null;
+var view = 'home';
+var editingId = null;
+var copy = null;
+var tone = '活泼';
+var keyword = '';
+var apiKey = localStorage.getItem('tb_apikey') || '';
+var apiBase = localStorage.getItem('tb_apibase') || 'https://api.openai.com/v1';
+var busy = false;
+var fcRef = null;
+var curFilter = { preset: 'appetite', intensity: 0.8 };
+
+/* 拼图状态 */
+var collageMode = 'simple';         // simple | creative
+var selectedImgIds = [];             // 拼图选中的图片 ID 列表
+var activeSimpleTmpl = 'grid2x2';   // 当前简单模板
+var activeCreativeTmpl = null;      // 当前创意模板
+
+/* ============================ 首页渲染 ============================ */
+function renderGrid() {
+  var grid = $('imgGrid');
+  grid.innerHTML = '';
+  images.forEach(function (im, idx) {
+    var isCover = im.id === coverId;
+    var div = document.createElement('div');
+    div.className = 'relative rounded-2xl overflow-hidden cursor-pointer transition active:scale-95 ' + (isCover ? 'ring-4 ring-yellow-400' : 'ring-1 ring-gray-200');
+    div.innerHTML = '<img src="' + im.url + '" alt="' + (im.name || '') + '" class="w-full h-32 object-cover" />' +
+      (isCover ? '<div class="absolute top-1 left-1 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-1.5 py-0.5 rounded">⭐推荐首图</div>' : '') +
+      '<div class="absolute bottom-1 right-1 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">第' + (idx + 1) + '张</div>';
+    div.onclick = function () { openEdit(im.id); };
+    grid.appendChild(div);
+  });
+  $('imgCount').textContent = images.length;
+  $('gridSection').classList.toggle('hidden', images.length === 0);
+  updateCollageEntry();
+}
+function renderCopy() {
+  var has = !!copy;
+  $('copyEmpty').classList.toggle('hidden', has);
+  $('copyContent').classList.toggle('hidden', !has);
+  $('btnExportLong').classList.toggle('hidden', !has);
+  if (has) {
+    $('copyTitle').value = copy.title;
+    $('copyBody').value = copy.body;
+    $('copyTags').value = (copy.tags || []).join(' ');
+  }
+  $('btnGenAI').classList.toggle('hidden', !apiKey);
+}
+function renderTone() {
+  var btns = $('toneBtns').children;
+  for (var i = 0; i < btns.length; i++) {
+    var b = btns[i];
+    var on = b.getAttribute('data-tone') === tone;
+    b.className = 'chip text-xs px-2.5 py-1 rounded-full ' + (on ? 'bg-grape text-white border border-gray-200' : 'bg-white text-gray-600 border border-gray-200');
+  }
+}
+function updateImage(id, patch) { images = images.map(function (im) { return im.id === id ? Object.assign({}, im, patch) : im; }); }
+
+/* ============================ 上传 ============================ */
+async function onFiles(files) {
+  var arr = Array.from(files);
+  var added = [];
+  arr.forEach(function (f) {
+    var url = URL.createObjectURL(f);
+    var im = { id: uid(), url: url, name: f.name, score: 0, canvasJSON: null, filter: null, pending: null, _stats: null };
+    added.push(im);
+  });
+  images = images.concat(added);
+  renderGrid();
+  for (var k = 0; k < added.length; k++) {
+    var im = added[k];
+    var s = await computeStats(im.url);
+    im._stats = s;  // 缓存 stats，避免编辑时重复计算
+    var sc = scoreImage(s);
+    updateImage(im.id, { score: sc });
+  }
+  if (!coverId && images.length) {
+    var best = images[0];
+    images.forEach(function (i) { if (i.score > best.score) best = i; });
+    coverId = best.id;
+  }
+  renderGrid();
+  renderCollagePicker();  // 更新拼图选择器
+  showToast('已上传 ' + added.length + ' 张 📸');
+}
+
+/* ============================ 文案操作 ============================ */
+async function genCopy(useAI, targetLen) {
+  if (busy) return;
+  busy = true;
+  try {
+    if (useAI && apiKey) {
+      var kw = keyword || '';
+      var lenReq = targetLen ? ('正文请至少写' + targetLen + '字、') : '';
+      var prompt = '请为一家探店写小红书风格文案。主题关键词：' + (kw || '美食探店') + '。要求：标题吸睛、' + lenReq + '正文带emoji、5-8个#话题。';
+      try { copy = await genCopyAI(apiKey, apiBase, prompt); showToast('AI 文案已生成 ✨'); }
+      catch (e) { copy = genCopyMock(keyword, tone, targetLen); showToast('AI 调用失败，已用本地模板'); }
+    } else { copy = genCopyMock(keyword, tone, targetLen); showToast('已生成探店文案 📝'); }
+    renderCopy();
+  } finally { busy = false; }
+}
+
+/* ============================ 文字同步到全部 ============================ */
+async function applyTextToAll(phrase) {
+  var changed = 0;
+  for (var i = 0; i < images.length; i++) {
+    var im = images[i];
+    if (!im.canvasJSON) continue;
+    try {
+      var el = document.createElement('canvas');
+      var tc = new fabric.StaticCanvas(el, { width: 400, height: 500 });
+      await new Promise(function (res) { tc.loadFromJSON(im.canvasJSON, res); });
+      var any = false;
+      tc.getObjects().forEach(function (o) { if (o.objType === 'fancy') { o.set('text', phrase); any = true; } });
+      if (any) { tc.renderAll(); var json = tc.toJSON(['objType', 'fancyStyle', 'stickerKind']); updateImage(im.id, { canvasJSON: json }); changed++; }
+      tc.dispose();
+    } catch (e) {}
+  }
+  showToast('已把文字同步到 ' + changed + ' 张图片 🔁');
+}
+
+/* ============================ 首页命令 ============================ */
+function handleCommand(text) {
+  var c = parseCmd(text);
+  if (c.type === 'cover') {
+    var im = images[c.value];
+    if (im) { coverId = im.id; renderGrid(); showToast('已设为首图：第' + (c.value + 1) + '张'); }
+    else showToast('没有第' + (c.value + 1) + '张图片');
+  } else if (c.type === 'filter') {
+    if (c.value) {
+      images = images.map(function (im) { return Object.assign({}, im, { pending: Object.assign({}, im.pending, { filter: { preset: c.value, intensity: 0.8 }, intensity: 0.8 }), canvasJSON: null }); });
+      showToast('全部图片滤镜 → ' + (FILTERS.find(function (f) { return f.id === c.value; }) || {}).name);
+    } else showToast('未识别滤镜，试试：冷色 / 暖色 / 清冷高级');
+  } else if (c.type === 'text') {
+    applyTextToAll(c.value);
+  } else if (c.type === 'tone') {
+    tone = c.value; renderTone(); genCopy(false, null);
+  } else if (c.type === 'gencopy') {
+    if (c.tone) { tone = c.tone; renderTone(); }
+    if (c.topic) { keyword = c.topic; $('kwInput').value = c.topic; }
+    var useAI = !!apiKey;
+    genCopy(useAI, c.len);
+    showToast(c.len ? ('已生成约 ' + c.len + ' 字文案') : '已生成探店文案 📝');
+  } else if (c.type === 'collage') {
+    openCollageSection();
+  } else {
+    showToast('试试：「生成150字文案」「写火锅的文案」「首图换成第2张」「滤镜全部冷色」「文字改成好吃到哭」「打开拼图」');
+  }
+}
+
+/* ============================ 长图导出 ============================ */
+function exportLong() {
+  var cover = images.find(function (i) { return i.id === coverId; });
+  if (!cover) { showToast('请先上传图片'); return; }
+  var im = new Image();
+  im.onload = function () {
+    var W = 1080, topH = 1350, botH = 720;
+    var cv = document.createElement('canvas'); cv.width = W; cv.height = topH + botH;
+    var ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, cv.height);
+    var scale = Math.max(W / im.width, topH / im.height);
+    var dw = im.width * scale, dh = im.height * scale;
+    ctx.drawImage(im, (W - dw) / 2, (topH - dh) / 2, dw, dh);
+    ctx.fillStyle = '#3a2a4a'; ctx.font = 'bold 52px "Noto Sans SC", sans-serif';
+    wrapText(ctx, (copy && copy.title) || '我的探店日记', 60, topH + 90, W - 120, 70);
+    ctx.font = '34px "Noto Sans SC", sans-serif';
+    wrapText(ctx, (copy && copy.body) || '今天去了一家很棒的店，强烈推荐！', 60, topH + 200, W - 120, 52);
+    ctx.font = '30px "Noto Sans SC", sans-serif'; ctx.fillStyle = '#7C4DFF';
+    var tags = (copy && copy.tags) ? copy.tags.map(function (t) { return '#' + t; }).join(' ') : '#美食探店 #宝藏小店';
+    wrapText(ctx, tags, 60, topH + 520, W - 120, 44);
+    var a = document.createElement('a'); a.href = cv.toDataURL('image/png'); a.download = '探店长图.png'; a.click();
+    showToast('长图已导出 📲');
+  };
+  im.src = cover.url;
+}
+function wrapText(ctx, text, x, y, maxW, lh) {
+  var chars = text.split(''); var line = ''; var yy = y;
+  for (var i = 0; i < chars.length; i++) {
+    var ch = chars[i];
+    if (ctx.measureText(line + ch).width > maxW && line) { ctx.fillText(line, x, yy); line = ch; yy += lh; }
+    else line += ch;
+  }
+  if (line) ctx.fillText(line, x, yy);
+}
+
+/* ================================================================
+   ====================  编辑视图（优化版） ====================
+   ================================================================ */
+function openEdit(id) {
+  var im = images.find(function (i) { return i.id === id; });
+  if (!im) return;
+  editingId = id; view = 'edit';
+  $('homeView').classList.add('hidden');
+  $('editView').classList.remove('hidden');
+  $('editTitle').textContent = im.name || '图片编辑';
+  switchEditTab('filter');
+  // 显示编辑页加载遮罩
+  $('editLoader').classList.remove('hidden');
+  // 重建 canvas 元素避免 fabric 复用问题
+  $('canvasWrap').innerHTML = '<canvas id="editCanvas"></canvas>';
+  // 用 requestAnimationFrame 确保 DOM 已更新后再初始化
+  requestAnimationFrame(function () { initEditCanvas(im); });
+}
+function closeEdit() {
+  if (fcRef) { try { fcRef.dispose(); } catch (e) {} fcRef = null; }
+  $('editView').classList.add('hidden');
+  $('homeView').classList.remove('hidden');
+  view = 'home'; editingId = null;
+  renderGrid();
+}
+function initEditCanvas(im) {
+  var c = new fabric.Canvas('editCanvas', { width: 400, height: 500, backgroundColor: '#ffffff', preserveObjectStacking: true });
+  fcRef = c;
+  c.clear(); c.backgroundColor = '#ffffff';
+  c.on('selection:created', onSel); c.on('selection:updated', onSel);
+  c.on('selection:cleared', function () { setSelPanel(null); });
+  c.on('object:modified', function () { setSelPanel(null); });
+
+  function done() {
+    $('editLoader').classList.add('hidden');
+  }
+
+  if (im.canvasJSON) {
+    c.loadFromJSON(im.canvasJSON, function () {
+      c.getObjects().forEach(function (o) { if (o.objType === 'photo') { o.selectable = false; o.evented = false; } });
+      if (im.filter) { curFilter = { preset: im.filter.preset, intensity: im.filter.intensity }; setFilterUI(im.filter.preset, Math.round(im.filter.intensity * 100)); }
+      c.renderAll();
+      done();
+    });
+    return;
+  }
+
+  // 使用缓存的 stats 或重新计算
+  var statsPromise = im._stats ? Promise.resolve(im._stats) : computeStats(im.url);
+
+  statsPromise.then(function (stats) {
+    if (!im._stats) im._stats = stats;  // 缓存起来
+    var preset = (im.pending && im.pending.filter) ? im.pending.filter.preset : pickFilter(stats);
+    var intensity = (im.pending && im.pending.intensity != null) ? im.pending.intensity : 0.8;
+    curFilter = { preset: preset, intensity: intensity };
+    setFilterUI(preset, Math.round(intensity * 100));
+
+    fabric.Image.fromURL(im.url, function (fimg) {
+      var cw = c.getWidth(), ch = c.getHeight();
+      var scale = Math.max(cw / fimg.width, ch / fimg.height);
+      fimg.set({ originX: 'center', originY: 'center', left: cw / 2, top: ch / 2, selectable: false, evented: false, objType: 'photo' });
+      fimg.scale(scale);
+      fimg.filters = buildFilters(preset, intensity);
+      fimg.applyFilters();
+      c.add(fimg); c.sendToBack(fimg);
+
+      var sty = (im.pending && im.pending.style) || pick(['A', 'F']);
+      addFancyText(c, { text: pick(PHRASES), styleId: sty, layout: 'center' });
+      if (Math.random() > 0.35) addFancyText(c, { text: pick(PHRASES), styleId: pick(['C', 'E']), layout: 'corner' });
+
+      var n = 2 + Math.floor(Math.random() * 3);
+      for (var k = 0; k < n; k++) addSticker(c, randomSticker());
+
+      c.renderAll();
+      done();
+    }, { crossOrigin: 'anonymous' });
+  });
+}
+function onSel() {
+  var o = fcRef.getActiveObject();
+  setSelPanel(o && o.objType === 'fancy' ? o : null);
+}
+function setSelPanel(o) {
+  if (!o) { switchEditTab('filter'); return; }
+  $('panel-filter').classList.add('hidden');
+  $('panel-text').classList.add('hidden');
+  $('panel-sticker').classList.add('hidden');
+  $('panel-palette').classList.add('hidden');
+  $('panel-selected').classList.remove('hidden');
+  document.querySelector('#editTabs [data-tab="selected"]').classList.remove('hidden');
+  $('colorText').value = (typeof o.fill === 'string') ? o.fill : '#ffffff';
+  $('colorStroke').value = (typeof o.stroke === 'string') ? o.stroke : '#ffffff';
+  $('strokeW').value = o.strokeWidth || 0;
+}
+function setFilterUI(preset, intensity) {
+  document.querySelectorAll('#filterList .fbtn').forEach(function (b) {
+    b.className = 'fbtn chip shrink-0 w-20 rounded-2xl overflow-hidden border-2 ' + (b.getAttribute('data-f') === preset ? 'border-grape' : 'border-transparent');
+  });
+  $('intensityRange').value = intensity;
+  $('intensityVal').textContent = intensity + '%';
+}
+function applyCurFilter() {
+  if (!fcRef) return;
+  var photo = fcRef.getObjects().find(function (o) { return o.objType === 'photo'; });
+  if (photo) { photo.filters = buildFilters(curFilter.preset, curFilter.intensity); photo.applyFilters(); fcRef.renderAll(); }
+}
+function switchEditTab(tab) {
+  ['filter', 'text', 'sticker', 'palette', 'selected'].forEach(function (t) {
+    $('panel-' + t).classList.toggle('hidden', t !== tab);
+  });
+  var btns = document.querySelectorAll('#editTabs [data-tab]');
+  btns.forEach(function (b) {
+    var t = b.getAttribute('data-tab');
+    if (t === 'selected') { if (tab !== 'selected') b.classList.add('hidden'); return; }
+    b.className = 'chip whitespace-nowrap px-3 py-1.5 rounded-full text-sm ' + (t === tab ? 'bg-grape text-white' : 'bg-white text-gray-600');
+  });
+}
+function activeFancy() { return fcRef ? fcRef.getActiveObject() : null; }
+function saveEdits() {
+  if (!fcRef || !editingId) return;
+  var json = fcRef.toJSON(['objType', 'fancyStyle', 'stickerKind']);
+  updateImage(editingId, { canvasJSON: json, filter: Object.assign({}, curFilter) });
+}
+
+/* ============================ 编辑内操作 ============================ */
+function exportImg(ratio) {
+  if (!fcRef) return;
+  var W = 1080, H = ratio === '1:1' ? 1080 : 1350;
+  var dataUrl = fcRef.toDataURL({ format: 'png', multiplier: W / fcRef.getWidth() });
+  var im = new Image();
+  im.onload = function () {
+    var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    var ctx = cv.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+    var scale = Math.max(W / im.width, H / im.height);
+    var dw = im.width * scale, dh = im.height * scale;
+    ctx.drawImage(im, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    var a = document.createElement('a'); a.href = cv.toDataURL('image/png');
+    a.download = '探店_' + (ratio === '1:1' ? '1x1' : '小红书') + '.png'; a.click();
+    showToast('已导出 ' + (ratio === '1:1' ? '1:1' : '1080×1350') + ' 📥');
+  };
+  im.src = dataUrl;
+}
+function applyAll() {
+  if (!fcRef || !editingId) return;
+  var firstFancy = fcRef.getObjects().find(function (o) { return o.objType === 'fancy'; });
+  var style = firstFancy ? firstFancy.fancyStyle : 'C';
+  images = images.map(function (im) {
+    if (im.id === editingId) return im;
+    return Object.assign({}, im, { pending: Object.assign({}, im.pending, { filter: Object.assign({}, curFilter), style: style, intensity: curFilter.intensity }), canvasJSON: null });
+  });
+  showToast('已同步风格到其他图片 🔁');
+}
+function editHandleCmd(text) {
+  var c = parseCmd(text);
+  if (c.type === 'text') {
+    if (!fcRef) return;
+    var n = 0;
+    fcRef.getObjects().forEach(function (o) { if (o.objType === 'fancy') { o.set('text', c.value); n++; } });
+    fcRef.renderAll(); showToast('已把 ' + n + ' 处文字改为「' + c.value + '」');
+  } else if (c.type === 'filter') {
+    if (c.value) { curFilter.preset = c.value; applyCurFilter(); setFilterUI(c.value, Math.round(curFilter.intensity * 100)); showToast('滤镜 → ' + (FILTERS.find(function (f) { return f.id === c.value; }) || {}).name); }
+    else showToast('未识别滤镜名，试试：食欲大增 / 清冷高级');
+  } else if (c.type === 'tone' || c.type === 'gencopy') {
+    showToast('文案在首页生成/调整，点左上角「← 返回」即可～');
+  } else { showToast('试试：「文字改成好吃到哭」「滤镜改成清冷高级」「生成150字文案」'); }
+}
+
+/* ============================ 静态面板填充 ============================ */
+function buildStaticPanels() {
+  // 滤镜列表
+  var fl = $('filterList'); fl.innerHTML = '';
+  FILTERS.forEach(function (f) {
+    var b = document.createElement('button');
+    b.className = 'fbtn chip shrink-0 w-20 rounded-2xl overflow-hidden border-2 border-transparent';
+    b.setAttribute('data-f', f.id);
+    b.innerHTML = '<div class="h-14" style="background:' + f.swatch + '"></div><div class="text-xs py-1 text-center bg-white">' + f.name + '</div>';
+    b.onclick = function () { curFilter.preset = f.id; applyCurFilter(); setFilterUI(f.id, Math.round(curFilter.intensity * 100)); };
+    fl.appendChild(b);
+  });
+  // 短语 chips
+  var pc = $('phraseChips'); pc.innerHTML = '';
+  PHRASES.slice(0, 8).forEach(function (p) {
+    var b = document.createElement('button');
+    b.className = 'chip text-xs bg-white rounded-full px-2.5 py-1 border border-gray-200';
+    b.textContent = p;
+    b.onclick = function () { addFancyText(fcRef, { text: p, styleId: pick(['A', 'F', 'C', 'E']), layout: pick(['center', 'corner', 'vertical']) }); showToast('已添加花字 ✨'); };
+    pc.appendChild(b);
+  });
+  // 装饰贴纸
+  var dl = $('decoList'); dl.innerHTML = '';
+  DECO.forEach(function (d) {
+    var b = document.createElement('button');
+    b.className = 'chip text-2xl w-10 h-10 rounded-xl bg-white shadow-card';
+    b.textContent = d;
+    b.onclick = function () { if (fcRef) addSticker(fcRef, { char: d, kind: 'deco' }); };
+    dl.appendChild(b);
+  });
+  // 功能贴纸
+  var bl = $('badgeList'); bl.innerHTML = '';
+  BADGES.forEach(function (b2) {
+    var b = document.createElement('button');
+    b.className = 'chip text-xs bg-ygreen/20 rounded-full px-3 py-1.5 border border-ygreen/40';
+    b.textContent = b2;
+    b.onclick = function () { if (fcRef) addSticker(fcRef, { char: b2, kind: 'badge' }); };
+    bl.appendChild(b);
+  });
+  // 调色盘
+  var pl = $('paletteList'); pl.innerHTML = '';
+  PALETTE.forEach(function (p) {
+    var b = document.createElement('button');
+    b.className = 'chip rounded-xl h-14 border border-white shadow-card flex items-center justify-center text-xs text-white font-bold';
+    b.style.background = (p.c1 === p.c2) ? p.c1 : ('linear-gradient(135deg,' + p.c1 + ',' + p.c2 + ')');
+    b.textContent = p.name;
+    b.onclick = function () {
+      var o = activeFancy();
+      if (!o) { showToast('请先点选一个花字'); return; }
+      o.set('fill', p.c1 === p.c2 ? p.c1 : makeGradient(p.c1, p.c2));
+      o.set('stroke', p.stroke);
+      o.set('paintFirst', (o.fancyStyle === 'A' || o.fancyStyle === 'B' || o.fancyStyle === 'E') ? 'stroke' : 'fill');
+      fcRef.renderAll(); showToast('已应用配色：' + p.name);
+    };
+    pl.appendChild(b);
+  });
+  // 选中面板：样式按钮
+  var sb = $('styleBtns'); sb.innerHTML = '';
+  ['A', 'B', 'C', 'D', 'E', 'F'].forEach(function (s) {
+    var b = document.createElement('button');
+    b.className = 'chip w-8 h-8 rounded-lg text-sm bg-white text-gray-600 border border-gray-200';
+    b.textContent = s;
+    b.onclick = function () {
+      var o = activeFancy(); if (!o) return;
+      applyFancyStyle(o, s, {}); o.fancyStyle = s; fcRef.renderAll();
+      showToast('样式：' + s);
+    };
+    sb.appendChild(b);
+  });
+  // 选中面板：字体按钮
+  var fb = $('fontBtns'); fb.innerHTML = '';
+  [['round', '圆体'], ['hand', '手写'], ['black', '黑体'], ['song', '宋体']].forEach(function (pair) {
+    var b = document.createElement('button');
+    b.className = 'chip px-2 py-1 rounded-lg text-xs bg-white text-gray-600 border border-gray-200';
+    b.textContent = pair[1];
+    b.onclick = function () { var o = activeFancy(); if (!o) return; o.set('fontFamily', FONTS[pair[0]]); fcRef.renderAll(); };
+    fb.appendChild(b);
+  });
+
+  // ====== 构建拼图面板 ======
+  buildSimpleTmplList();
+  buildCreativeTmplList();
+}
+
+/* ================================================================
+   =======================  拼 图 功 能  =======================
+   ================================================================ */
+
+function updateCollageEntry() {
+  var row = $('collageEntryRow');
+  row.classList.toggle('hidden', images.length < 2);
+}
+
+function openCollageSection() {
+  $('collageSection').classList.remove('hidden');
+  $('collageEntryRow').classList.add('hidden');
+  renderCollagePicker();
+  // 默认全选
+  if (selectedImgIds.length === 0 && images.length >= 2) {
+    selectedImgIds = images.slice(0, Math.min(images.length, 4)).map(function (i) { return i.id; });
+    renderCollagePicker();
+  }
+  // 滚动到拼图区域
+  $('collageSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeCollageSection() {
+  $('collageSection').classList.add('hidden');
+  updateCollageEntry();
+}
+
+function renderCollagePicker() {
+  var picker = $('collagePicker');
+  picker.innerHTML = '';
+  images.forEach(function (im) {
+    var div = document.createElement('div');
+    div.className = 'img-picker-item w-16 h-16 ' + (selectedImgIds.indexOf(im.id) >= 0 ? 'selected' : '');
+    div.innerHTML = '<img src="' + im.url + '" class="w-full h-full object-cover" />';
+    div.onclick = function () {
+      var idx = selectedImgIds.indexOf(im.id);
+      if (idx >= 0) { selectedImgIds.splice(idx, 1); }
+      else { selectedImgIds.push(im.id); }
+      renderCollagePicker();
+    };
+    picker.appendChild(div);
+  });
+  $('collageSelCount').textContent = selectedImgIds.length;
+}
+
+function setCollageMode(mode) {
+  collageMode = mode;
+  document.querySelectorAll('.cmode-btn').forEach(function (b) {
+    var m = b.getAttribute('data-cmode');
+    b.className = 'cmode-btn chip flex-1 rounded-xl py-2 text-sm ' + (m === mode ? 'bg-grape text-white shadow-card' : 'bg-white text-gray-600 border border-gray-200');
+  });
+  $('simpleTmplArea').classList.toggle('hidden', mode !== 'simple');
+  $('creativeTmplArea').classList.toggle('hidden', mode !== 'creative');
+}
+
+function buildSimpleTmplList() {
+  var list = $('simpleTmplList');
+  list.innerHTML = '';
+  SIMPLE_TEMPLATES.forEach(function (t) {
+    var card = document.createElement('div');
+    card.className = 'tmpl-card w-20 ' + (t.id === activeSimpleTmpl ? 'active' : '');
+    card.setAttribute('data-tmpl', t.id);
+    card.innerHTML =
+      '<svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">' +
+      '  <rect width="60" height="60" rx="8" fill="#f5f0ff"/>' +
+      '  <path d="' + t.icon + '" fill="#BAACEB" stroke="#7C4DFF" stroke-width="1"/>' +
+      '</svg>' +
+      '<div class="text-[10px] text-center py-1 bg-white text-gray-700">' + t.name + '</div>';
+    card.onclick = function () {
+      activeSimpleTmpl = t.id;
+      list.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); });
+      card.classList.add('active');
+    };
+    list.appendChild(card);
+  });
+}
+
+function buildCreativeTmplList() {
+  var list = $('creativeTmplList');
+  list.innerHTML = '';
+  CREATIVE_TEMPLATES.forEach(function (t) {
+    var card = document.createElement('div');
+    card.className = 'tmpl-card w-24 ' + (activeCreativeTmpl === t.id ? 'active' : '');
+    card.setAttribute('data-ctmpl', t.id);
+    card.innerHTML =
+      '<div class="h-20 flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100 text-2xl">' +
+        t.name.split(' ')[0] +
+      '</div>' +
+      '<div class="text-[10px] text-center py-1 bg-white text-gray-700">' + t.name + '</div>' +
+      '<div class="text-[9px] text-center pb-1 text-gray-400">' + t.desc + '</div>';
+    card.onclick = function () {
+      activeCreativeTmpl = t.id;
+      list.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); });
+      card.classList.add('active');
+    };
+    list.appendChild(card);
+  });
+}
+
+// ---- 加载图片并返回 Image 对象（用于拼图）----
+// 兼容：直接传 URL 字符串，或传图片对象 {url:...}
+function loadImage(src) {
+  return new Promise(function (res, rej) {
+    var url = typeof src === 'string' ? src : (src && src.url ? src.url : '');
+    if (!url) { rej(new Error('图片地址无效')); return; }
+    var img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () { res(img); };
+    img.onerror = function () { rej(new Error('图片加载失败')); };
+    img.src = url;
+  });
+}
+
+// ---- 获取选中的图片对象 ----
+function getSelectedImages() {
+  return images.filter(function (im) { return selectedImgIds.indexOf(im.id) >= 0; });
+}
+
+// ====== 简单拼接渲染函数 ======
+async function renderSimpleCollage(tmpl) {
+  var sel = getSelectedImages();
+  if (sel.length < 2) { showToast('至少选 2 张图片'); return; }
+
+  var SIZE = 800;
+  var pad = tmpl.pad * (SIZE / 400);  // 缩放 padding
+  var gap = tmpl.gap * (SIZE / 400);
+
+  // 计算画布尺寸
+  var W, H;
+  if (tmpl.layout === 'insta') {
+    W = SIZE; H = SIZE;
+  } else {
+    W = SIZE;
+    H = SIZE;  // 默认正方形
+  }
+
+  var cv = document.getElementById('collageCanvas');
+  cv.width = W; cv.height = H;
+  var ctx = cv.getContext('2d');
+
+  // 背景
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  // 根据模板类型绘制
+  if (tmpl.layout === 'insta') {
+    // Instagram 3+1: 左侧大图占2/3，右侧分3个小图
+    var bigW = W * 0.62, smallW = (W - pad * 3 - gap) / 2;
+    var halfH = (H - pad * 2 - gap) / 2;
+    var imgs = await Promise.all(sel.slice(0, 4).map(loadImage));
+
+    // 大图
+    drawFitImage(ctx, imgs[0], pad, pad, bigW, H - pad * 2);
+    // 右上
+    drawFitImage(ctx, imgs[1] || imgs[0], pad * 2 + bigW + gap, pad, smallW, halfH);
+    // 右下
+    drawFitImage(ctx, imgs[2] || imgs[0], pad * 2 + bigW + gap, pad + halfH + gap, smallW, halfH);
+    // 底部小条（如果有第4张）
+    if (imgs[3]) {
+      var stripH = 60;
+      drawFitImage(ctx, imgs[3], pad, H - pad - stripH, bigW + smallW + gap, stripH);
+    }
+
+  } else if (tmpl.id === 'leftBig') {
+    // 左大右小
+    var imgs = await Promise.all(sel.slice(0, 3).map(loadImage));
+    var lw = W * 0.58, rw = W - lw - gap - pad * 2;
+    var halfH = (H - pad * 2 - gap) / 2;
+    drawFitImage(ctx, imgs[0], pad, pad, lw, H - pad * 2);
+    drawFitImage(ctx, imgs[1] || imgs[0], pad + lw + gap, pad, rw, halfH);
+    drawFitImage(ctx, imgs[2] || imgs[0], pad + lw + gap, pad + halfH + gap, rw, halfH);
+
+  } else if (tmpl.id === 'topBottom') {
+    // 上下拼接
+    var imgs = await Promise.all(sel.slice(0, 2).map(loadImage));
+    var halfH = (H - pad * 2 - gap) / 2;
+    drawFitImage(ctx, imgs[0], pad, pad, W - pad * 2, halfH);
+    drawFitImage(ctx, imgs[1] || imgs[0], pad, pad + halfH + gap, W - pad * 2, halfH);
+
+  } else if (tmpl.id === 'grid1x3') {
+    // 1行3列
+    var imgs = await Promise.all(sel.slice(0, 3).map(loadImage));
+    var cellW = (W - pad * 2 - gap * 2) / 3;
+    var cellH = H - pad * 2;
+    for (var i = 0; i < 3; i++) {
+      drawFitImage(ctx, imgs[i] || imgs[0], pad + i * (cellW + gap), pad, cellW, cellH);
+    }
+
+  } else if (tmpl.id === 'grid2x3') {
+    // 2x3 网格
+    var imgs = await Promise.all(sel.slice(0, 6).map(function (im) { return loadImage(im.url); }));
+    var cols = 2, rows = 3;
+    var gw = (W - pad * 2 - gap * (cols - 1)) / cols;
+    var gh = (H - pad * 2 - gap * (rows - 1)) / rows;
+    for (var r = 0; r < rows; r++) {
+      for (var col = 0; col < cols; col++) {
+        var idx = r * cols + col;
+        drawFitImage(ctx, imgs[idx] || imgs[0], pad + col * (gw + gap), pad + r * (gh + gap), gw, gh);
+      }
+    }
+
+  } else {
+    // 默认 2x2
+    var imgs = await Promise.all(sel.slice(0, 4).map(loadImage));
+    var cellW = (W - pad * 2 - gap) / 2;
+    var cellH = (H - pad * 2 - gap) / 2;
+    drawFitImage(ctx, imgs[0], pad, pad, cellW, cellH);
+    drawFitImage(ctx, imgs[1] || imgs[0], pad + cellW + gap, pad, cellW, cellH);
+    drawFitImage(ctx, imgs[2] || imgs[0], pad, pad + cellH + gap, cellW, cellH);
+    drawFitImage(ctx, imgs[3] || imgs[0], pad + cellW + gap, pad + cellH + gap, cellW, cellH);
+  }
+}
+
+// ====== 创意拼图绘制函数 ======
+
+// 心形拼图
+async function drawHeartCollage(cv, selImages) {
+  var sel = selImages || getSelectedImages();
+  var W = 800, H = 800;
+  cv.width = W; cv.height = H;
+  var ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff5f8'; ctx.fillRect(0, 0, W, H);
+
+  var imgs = await Promise.all(sel.slice(0, 6).map(loadImage));
+  var cx = W / 2, cy = H * 0.48;
+
+  // 绘制心形路径作为裁剪区域
+  ctx.save();
+
+  // 心形主图（大图填充心形内部）
+  ctx.beginPath();
+  heartPath(ctx, cx, cy, Math.min(W, H) * 0.42);
+  ctx.closePath();
+  ctx.clip();
+  if (imgs[0]) drawCoverImage(ctx, imgs[0], 0, 0, W, H);
+  ctx.restore();
+
+  // 心形描边
+  ctx.strokeStyle = '#FF8FB1';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  heartPath(ctx, cx, cy, Math.min(W, H) * 0.42);
+  ctx.closePath();
+  ctx.stroke();
+
+  // 小图装饰在四角
+  var corners = [[20, 20], [W - 120, 20], [20, H - 120], [W - 120, H - 120]];
+  var size = 100;
+  corners.forEach(function (pos, i) {
+    if (imgs[i + 1]) {
+      ctx.save();
+      roundRect(ctx, pos[0], pos[1], size, size, 14);
+      ctx.clip();
+      drawCoverImage(ctx, imgs[i + 1], pos[0], pos[1], size, size);
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(124,77,255,0.3)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(pos[0], pos[1], size, size);
+    }
+  });
+
+  // 底部文字
+  ctx.fillStyle = '#5F5AA5';
+  ctx.font = 'bold 28px "ZCOOL KuaiLe", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('❤️ 探店日记', cx, H - 30);
+}
+
+function heartPath(ctx, cx, cy, size) {
+  var s = size;
+  ctx.moveTo(cx, cy + s * 0.3);
+  ctx.bezierCurveTo(cx, cy - s * 0.1, cx - s * 0.5, cy - s * 0.5, cx - s * 0.5, cy + s * 0.1);
+  ctx.bezierCurveTo(cx - s * 0.5, cy + s * 0.5, cx, cy + s * 0.8, cx, cy + s * 0.8);
+  ctx.bezierCurveTo(cx, cy + s * 0.8, cx + s * 0.5, cy + s * 0.5, cx + s * 0.5, cy + s * 0.1);
+  ctx.bezierCurveTo(cx + s * 0.5, cy - s * 0.5, cx, cy - s * 0.1, cx, cy + s * 0.3);
+}
+
+// 杂志风拼图
+async function drawMagazineCollage(cv, selImages) {
+  var sel = selImages || getSelectedImages();
+  var W = 800, H = 900;
+  cv.width = W; cv.height = H;
+  var ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fefefe'; ctx.fillRect(0, 0, W, H);
+
+  var imgs = await Promise.all(sel.slice(0, 5).map(loadImage));
+  if (!imgs.length) return;
+
+  // 主大图（偏右上）
+  ctx.save();
+  roundRect(ctx, 30, 20, W - 60, H * 0.52, 16);
+  ctx.clip();
+  drawCoverImage(ctx, imgs[0], 30, 20, W - 60, H * 0.52);
+  ctx.restore();
+
+  // 左下小图
+  if (imgs[1]) {
+    ctx.save();
+    roundRect(ctx, 30, H * 0.56, (W - 90) * 0.55, H * 0.34, 12);
+    ctx.clip();
+    drawCoverImage(ctx, imgs[1], 30, H * 0.56, (W - 90) * 0.55, H * 0.34);
+    ctx.restore();
+  }
+
+  // 右下小图
+  if (imgs[2]) {
+    ctx.save();
+    roundRect(ctx, 50 + (W - 90) * 0.55, H * 0.56, (W - 90) * 0.45, H * 0.34, 12);
+    ctx.clip();
+    drawCoverImage(ctx, imgs[2], 50 + (W - 90) * 0.55, H * 0.56, (W - 90) * 0.45, H * 0.34);
+    ctx.restore();
+  }
+
+  // 杂志文字元素
+  ctx.fillStyle = '#3a2a4a';
+  ctx.font = 'bold 36px "ZCOOL KuaiLe", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('TAN DIAN', 40, H * 0.54);
+  ctx.font = '14px "Noto Sans SC", sans-serif';
+  ctx.fillStyle = '#888';
+  ctx.fillText('FOOD & LIFE · 探店记录', 40, H * 0.54 + 24);
+  ctx.fillStyle = '#7C4DFF';
+  ctx.font = 'bold 18px "Noto Sans SC", sans-serif';
+  ctx.fillText('#美食探店 #宝藏小店 #周末好去处', 40, H - 18);
+}
+
+// 胶片风拼图
+async function drawFilmStripCollage(cv, selImages) {
+  var sel = selImages || getSelectedImages();
+  var W = 800, H = 340;
+  cv.width = W; cv.height = H;
+  var ctx = cv.getContext('2d');
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, W, H);
+
+  var imgs = await Promise.all(sel.slice(0, 6).map(loadImage));
+  var count = Math.min(imgs.length, 6);
+  var margin = 30;
+  var filmH = H - 20;
+  var holeY = 12, holeR = 5;
+  var totalW = W - margin * 2;
+  var gap = 8;
+  var cellW = (totalW - gap * (count - 1)) / count;
+
+  // 胶片两侧孔洞
+  ctx.fillStyle = '#eee';
+  for (var i = 0; i <= Math.floor(totalW / 50); i++) {
+    ctx.beginPath(); ctx.arc(margin + i * 50, holeY, holeR, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(margin + i * 50, H - holeY, holeR, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 图片帧
+  for (var j = 0; j < count; j++) {
+    var x = margin + j * (cellW + gap);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, 10, cellW, filmH);
+    ctx.clip();
+    if (imgs[j]) drawCoverImage(ctx, imgs[j], x, 10, cellW, filmH);
+    ctx.restore();
+    // 帧边框
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, 10, cellW, filmH);
+  }
+}
+
+// 圆形组合拼图
+async function drawCircleCollage(cv, selImages) {
+  var sel = selImages || getSelectedImages();
+  var W = 800, H = 800;
+  cv.width = W; cv.height = H;
+  var ctx = cv.getContext('2d');
+  // 渐变背景
+  var grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#f0ecff'); grad.addColorStop(1, '#ffeef5');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+
+  var imgs = await Promise.all(sel.slice(0, 5).map(loadImage));
+  if (!imgs.length) return;
+
+  // 中央大圆
+  var mainR = Math.min(W, H) * 0.32;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(W / 2, H * 0.46, mainR, 0, Math.PI * 2);
+  ctx.clip();
+  if (imgs[0]) drawCoverImage(ctx, imgs[0], W / 2 - mainR, H * 0.46 - mainR, mainR * 2, mainR * 2);
+  ctx.restore();
+
+  // 圆形边框
+  ctx.strokeStyle = '#7C4DFF'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(W / 2, H * 0.46, mainR, 0, Math.PI * 2); ctx.stroke();
+
+  // 周围小圆/方图
+  var positions = [
+    { x: W * 0.13, y: H * 0.13, r: 80, shape: 'circle' },
+    { x: W * 0.82, y: H * 0.15, r: 80, shape: 'circle' },
+    { x: W * 0.1, y: H * 0.72, r: 90, shape: 'roundRect' },
+    { x: W * 0.78, y: H * 0.73, r: 85, shape: 'circle' }
+  ];
+
+  positions.forEach(function (pos, i) {
+    if (!imgs[i + 1]) return;
+    ctx.save();
+    if (pos.shape === 'circle') {
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, pos.r, 0, Math.PI * 2); ctx.clip();
+    } else {
+      roundRect(ctx, pos.x - pos.r, pos.y - pos.r, pos.r * 2, pos.r * 1.4, 16);
+      ctx.clip();
+    }
+    drawCoverImage(ctx, imgs[i + 1], pos.x - pos.r, pos.y - pos.r, pos.r * 2, pos.r * 2);
+    ctx.restore();
+    // 边框
+    ctx.strokeStyle = 'rgba(186,172,235,0.6)'; ctx.lineWidth = 2;
+    if (pos.shape === 'circle') {
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, pos.r, 0, Math.PI * 2); ctx.stroke();
+    } else {
+      ctx.beginPath();
+      roundRectPath(ctx, pos.x - pos.r, pos.y - pos.r, pos.r * 2, pos.r * 1.4, 16);
+      ctx.stroke();
+    }
+  });
+
+  // 装饰文字
+  ctx.fillStyle = '#5F5AA5';
+  ctx.font = 'bold 22px "ZCOOL KuaiLe", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('✨ 探店合集 ✨', W / 2, H - 20);
+}
+
+// 不规则拼贴
+async function drawScatterCollage(cv, selImages) {
+  var sel = selImages || getSelectedImages();
+  var W = 800, H = 800;
+  cv.width = W; cv.height = H;
+  var ctx = cv.getContext('2d');
+  ctx.fillStyle = '#faf8ff'; ctx.fillRect(0, 0, W, H);
+
+  var imgs = await Promise.all(sel.slice(0, 6).map(loadImage));
+  var count = imgs.length;
+  if (!count) return;
+
+  // 预设的不规则位置（带旋转角度）
+  var slots = [
+    { x: 40, y: 30, w: 320, h: 280, rot: -3, r: 14 },
+    { x: 380, y: 50, w: 370, h: 240, rot: 2, r: 14 },
+    { x: 60, y: 330, w: 280, h: 220, rot: 1.5, r: 14 },
+    { x: 360, y: 310, w: 390, h: 250, rot: -2, r: 14 },
+    { x: 180, y: 570, w: 220, h: 180, rot: 4, r: 12 },
+    { x: 430, y: 580, w: 330, h: 170, rot: -1.5, r: 12 }
+  ];
+
+  // 绘制阴影层
+  ctx.save();
+  slots.forEach(function (slot, i) {
+    if (i >= count) return;
+    var img = imgs[i % count];
+    ctx.save();
+    ctx.translate(slot.x + slot.w / 2, slot.y + slot.h / 2);
+    ctx.rotate(slot.rot * Math.PI / 180);
+    // 阴影
+    ctx.shadowColor = 'rgba(80,40,140,0.15)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 5;
+    // 圆角裁剪
+    ctx.beginPath();
+    roundRectPath(ctx, -slot.w / 2, -slot.h / 2, slot.w, slot.h, slot.r);
+    ctx.clip();
+    drawCoverImage(ctx, img, -slot.w / 2, -slot.h / 2, slot.w, slot.h);
+    // 白色边框
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+  });
+  ctx.restore();
+
+  // 胶带装饰（随机位置）
+  var tapePositions = [[100, 25], [650, 40], [30, 320]];
+  tapePositions.forEach(function (pos) {
+    ctx.save();
+    ctx.translate(pos[0], pos[1]);
+    ctx.rotate((Math.random() * 10 - 5) * Math.PI / 180);
+    ctx.fillStyle = 'rgba(255,225,130,0.5)';
+    ctx.fillRect(-25, -6, 50, 12);
+    ctx.restore();
+  });
+}
+
+// ====== 通用绘图工具 ======
+function drawFitImage(ctx, img, x, y, w, h) {
+  var scale = Math.max(w / img.width, h / img.height);
+  var iw = img.width * scale, ih = img.height * scale;
+  ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+}
+
+function drawCoverImage(ctx, img, x, y, w, h) {
+  var scale = Math.max(w / img.width, h / img.height);
+  var iw = img.width * scale, ih = img.height * scale;
+  ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  roundRectPath(ctx, x, y, w, h, r);
+  ctx.closePath();
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+// ====== 生成拼图 ======
+async function generateCollage() {
+  var sel = getSelectedImages();
+  if (sel.length < 2) { showToast('至少选 2 张图片才能拼图哦'); return; }
+
+  var preview = $('collagePreviewWrap');
+  var loader = $('collageEditLoader');
+  loader.classList.remove('hidden');
+  preview.classList.remove('hidden');
+  $('btnExportCollage').classList.add('hidden');
+
+  // 让浏览器先渲染 loading
+  await new Promise(function (res) { setTimeout(res, 50); });
+
+  try {
+    if (collageMode === 'simple') {
+      var tmpl = SIMPLE_TEMPLATES.find(function (t) { return t.id === activeSimpleTmpl; }) || SIMPLE_TEMPLATES[0];
+      await renderSimpleCollage(tmpl);
+    } else {
+      var ct = CREATIVE_TEMPLATES.find(function (t) { return t.id === activeCreativeTmpl; }) || CREATIVE_TEMPLATES[0];
+      var need = ct.needCount;
+      if (sel.length < need[0]) {
+        showToast(ct.name + ' 至少需要 ' + need[0] + ' 张图片，当前 ' + sel.length + ' 张');
+        loader.classList.add('hidden');
+        return;
+      }
+      var cv = document.getElementById('collageCanvas');
+      await ct.draw(cv);
+    }
+    loader.classList.add('hidden');
+    $('btnExportCollage').classList.remove('hidden');
+    showToast('拼图生成完成！可预览或导出 🎨');
+  } catch (e) {
+    console.error(e);
+    loader.classList.add('hidden');
+    showToast('生成失败，请重试 ⚠️');
+  }
+}
+
+// 导出拼图
+function exportCollage() {
+  var cv = document.getElementById('collageCanvas');
+  if (!cv) return;
+  var url = cv.toDataURL('image/png');
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '探店拼图_' + Date.now() + '.png';
+  a.click();
+  showToast('拼图已导出 📥');
+}
+
+/* ============================ 事件绑定 ============================ */
+function bindEvents() {
+  // 上传
+  $('uploadZone').onclick = function () { $('fileInput').click(); };
+  $('fileInput').onchange = function (e) { if (e.target.files) onFiles(e.target.files); e.target.value = ''; };
+  var uz = $('uploadZone');
+  uz.ondragover = function (e) { e.preventDefault(); };
+  uz.ondrop = function (e) { e.preventDefault(); if (e.dataTransfer.files) onFiles(e.dataTransfer.files); };
+  $('btnSmartAll').onclick = function () {
+    images = images.map(function (im) { return Object.assign({}, im, { pending: Object.assign({}, im.pending, { auto: true }), canvasJSON: null }); });
+    showToast('已为全部图片标记智能优化，点开即可看到效果 🤖');
+  };
+
+  // 拼图入口
+  $('btnOpenCollage').onclick = openCollageSection;
+  $('btnCloseCollage').onclick = closeCollageSection;
+
+  // 拼图模式切换
+  document.querySelectorAll('.cmode-btn').forEach(function (b) {
+    b.onclick = function () { setCollageMode(b.getAttribute('data-cmode')); };
+  });
+
+  // 拼图生成/导出
+  $('btnGenCollage').onclick = generateCollage;
+  $('btnExportCollage').onclick = exportCollage;
+
+  // 文风
+  var tbtns = $('toneBtns').children;
+  for (var i = 0; i < tbtns.length; i++) {
+    (function (b) { b.onclick = function () { tone = b.getAttribute('data-tone'); renderTone(); }; })(tbtns[i]);
+  }
+  // 文案
+  $('kwInput').oninput = function (e) { keyword = e.target.value; };
+  $('btnGenLocal').onclick = function () { genCopy(false); };
+  $('btnGenAI').onclick = function () { genCopy(true); };
+  $('btnExportLong').onclick = exportLong;
+  // 首页命令
+  $('btnCmdHome').onclick = function () { var v = $('cmdHome').value; if (v.trim()) { handleCommand(v); $('cmdHome').value = ''; } };
+  $('cmdHome').onkeydown = function (e) { if (e.key === 'Enter') { var v = e.target.value; if (v.trim()) { handleCommand(v); e.target.value = ''; } } };
+  // 设置
+  $('btnSettings').onclick = function () {
+    $('apiKeyInput').value = apiKey; $('apiBaseInput').value = apiBase;
+    $('settingsModal').classList.remove('hidden');
+  };
+  $('btnSettingDone').onclick = function () {
+    apiKey = $('apiKeyInput').value.trim(); apiBase = $('apiBaseInput').value.trim() || 'https://api.openai.com/v1';
+    localStorage.setItem('tb_apikey', apiKey); localStorage.setItem('tb_apibase', apiBase);
+    $('settingsModal').classList.add('hidden'); renderCopy();
+  };
+  $('settingsModal').onclick = function (e) { if (e.target === $('settingsModal')) $('settingsModal').classList.add('hidden'); };
+
+  // 编辑视图：返回 / 应用全部 / 导出
+  $('btnBack').onclick = function () { saveEdits(); closeEdit(); };
+  $('btnApplyAll').onclick = applyAll;
+  $('btnExport').onclick = function () { exportImg('4:5'); };
+  // 编辑 tab
+  var etabs = document.querySelectorAll('#editTabs [data-tab]');
+  etabs.forEach(function (b) { b.onclick = function () { var t = b.getAttribute('data-tab'); if (t === 'selected') return; switchEditTab(t); }; });
+  // 强度
+  $('intensityRange').oninput = function (e) {
+    var v = +e.target.value; curFilter.intensity = v / 100; applyCurFilter(); $('intensityVal').textContent = v + '%';
+  };
+  // 花字添加
+  $('btnAddText').onclick = function () {
+    if (!fcRef) return;
+    var phrase = $('phraseInput').value || pick(PHRASES);
+    addFancyText(fcRef, { text: phrase, styleId: $('styleSelect').value, layout: $('layoutSelect').value, font: FONTS.round });
+    showToast('已添加花字 ✨');
+  };
+  $('btnSmartAdd').onclick = function () {
+    if (!fcRef) return;
+    addFancyText(fcRef, { text: pick(PHRASES), styleId: pick(['A', 'F', 'C', 'E', 'B', 'D']), layout: pick(['center', 'corner', 'vertical']) });
+    showToast('AI 已智能排版 🎨');
+  };
+  // 选中面板
+  $('colorText').oninput = function (e) { var o = activeFancy(); if (o) { o.set('fill', e.target.value); fcRef.renderAll(); } };
+  $('colorStroke').oninput = function (e) { var o = activeFancy(); if (o) { o.set('stroke', e.target.value); fcRef.renderAll(); } };
+  $('strokeW').oninput = function (e) { var o = activeFancy(); if (o) { o.set('strokeWidth', +e.target.value); fcRef.renderAll(); } };
+  $('btnDelSel').onclick = function () { if (!fcRef) return; var o = fcRef.getActiveObject(); if (o) { fcRef.remove(o); fcRef.renderAll(); setSelPanel(null); showToast('已删除'); } };
+  // 编辑内命令
+  $('btnCmdEdit').onclick = function () { var v = $('cmdEdit').value; if (v.trim()) { editHandleCmd(v); $('cmdEdit').value = ''; } };
+  $('cmdEdit').onkeydown = function (e) { if (e.key === 'Enter') { var v = e.target.value; if (v.trim()) { editHandleCmd(v); e.target.value = ''; } } };
+  // Delete 键删除选中
+  document.addEventListener('keydown', function (e) {
+    if (view === 'edit' && (e.key === 'Delete' || e.key === 'Backspace')) {
+      if (fcRef && fcRef.getActiveObject() && document.activeElement && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        fcRef.remove(fcRef.getActiveObject()); fcRef.renderAll(); setSelPanel(null);
+      }
+    }
+  });
+}
+
+/* ============================ 启动 ============================ */
+function boot() {
+  buildStaticPanels();
+  bindEvents();
+  renderTone();
+  renderCopy();
+  renderGrid();
+  // 隐藏全局加载遮罩
+  var mask = $('loadingMask');
+  if (mask) mask.style.display = 'none';
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+</script>
+</body>
+</html>
